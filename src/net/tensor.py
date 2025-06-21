@@ -66,8 +66,7 @@ class Tensor:
         da = dc @ b.T
         db = a.T @ dc
 
-        a.grad += unbroadcast(da, a.shape)
-        b.grad += unbroadcast(db, b.shape)
+        return (unbroadcast(da, a.shape), unbroadcast(db, b.shape))
 
     def __add__(self, other):
         """
@@ -92,8 +91,8 @@ class Tensor:
 
     def _add_backward(self):
         assert self.op == '+'
-        self.parents[0].grad += unbroadcast(self.grad, self.parents[0].shape)
-        self.parents[1].grad += unbroadcast(self.grad, self.parents[1].shape)
+        return (unbroadcast(self.grad, self.parents[0].shape), 
+                unbroadcast(self.grad, self.parents[1].shape))
 
     def __sub__(self, other):
         """
@@ -119,8 +118,8 @@ class Tensor:
 
     def _sub_backward(self):
         assert self.op == '-'
-        self.parents[0].grad += unbroadcast(self.grad, self.parents[0].shape)
-        self.parents[1].grad += unbroadcast(self.grad, -self.parents[1].shape)
+        return (unbroadcast(self.grad, self.parents[0].shape),
+                unbroadcast(self.grad, -self.parents[1].shape))
 
     def __mul__(self, other):
         """
@@ -146,8 +145,8 @@ class Tensor:
     
     def _mul_backward(self):
         assert self.op == '*'
-        self.parents[0].grad += unbroadcast(self.grad * self.parents[1].value, self.parents[0].shape)
-        self.parents[1].grad += unbroadcast(self.grad * self.parents[0].value, self.parents[1].shape)
+        return (unbroadcast(self.grad * self.parents[1].value, self.parents[0].shape),
+                unbroadcast(self.grad * self.parents[0].value, self.parents[1].shape))
 
     def __div__(self, other):
         """
@@ -219,7 +218,7 @@ class Tensor:
     
     def _tanh_backward(self):
         assert self.op == 'tanh'
-        self.parents[0].grad += (1 - self.value ** 2) * self.grad
+        return (1 - self.value ** 2) * self.grad
 
     def relu(self):
         """
@@ -229,7 +228,7 @@ class Tensor:
     
     def _relu_backward(self):
         assert self.op == 'relu'
-        self.parents[0].grad += (self.value > 0).astype(float) * self.grad
+        return (self.value > 0).astype(float) * self.grad
     
     def cross_entropy(self, targets):
         """
@@ -262,7 +261,7 @@ class Tensor:
         n = logits.shape[0]
         grad[np.arange(n), self.parents[1]] -= 1
         grad /= n
-        self.parents[0].grad = grad
+        return (grad, None)
 
     def transpose(self, axes= None):
         """
@@ -281,12 +280,10 @@ class Tensor:
     def _transpose_backward(self):
         assert self.op == 'T'
         if self._transpose_axes is None:
-            self.parents[0].grad += self.grad.T
-        else:
-            inv_axes = np.argsort(self._transpose_axes)
-            self.parents[0].grad = self.grad.transpose(inv_axes)
+            return (self.grad.T,)
+        inv_axes = np.argsort(self._transpose_axes)
+        return (self.grad.transpose(inv_axes),)
 
-    
     def zero_grad_shallow(self):
         """
         Reset gradient
@@ -298,7 +295,7 @@ class Tensor:
         """
         self.zero_grad_shallow()
         for p in self.parents:
-            self.zero_grad_deep()
+            p.zero_grad_deep()
 
 
     def item(self):
@@ -309,29 +306,39 @@ class Tensor:
             return self.value.item()
         raise ValueError
     
-    def backward(self):
+    def _local_grads(self):
         """
-        Recursive backward pass at current Tensor object
+        Get local gradients
         """
-
         if self.op is None:
-            return
+            return ()
         if self.op == 'cross_entropy':
-            self._cross_entropy_backward()
+            return self._cross_entropy_backward()
         if self.op == 'tanh':
-            self._tanh_backward()
+            return self._tanh_backward()
         if self.op == 'relu':
-            self._relu_backward()
+            return self._relu_backward()
         if self.op == '@':
-            self._matmul_backward()
+            return self._matmul_backward()
         if self.op == '+':
-            self._add_backward()
+            return self._add_backward()
         if self.op == '-':
-            self._sub_backward()
+            return self._sub_backward()
         if self.op == '*':
-            self._mul_backward()
+            return self._mul_backward()
         if self.op == 'T':
-            self._transpose_backward()
-        
-        for p in self.parents:
-            p.backward()
+            return self._transpose_backward()
+
+    def backward(self, grad=None):
+        """
+        Perform backward pass starting at the current node
+        """
+        if grad is None:
+            grad = np.ones_like(self.value)
+        if self.grad is None:
+            self.grad = np.zeros_like(self.value)
+
+        for parent, parent_grad in zip(self.parents, self._local_grads()):
+            if parent_grad is not None:
+                parent.backward(parent_grad)
+
