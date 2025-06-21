@@ -25,9 +25,11 @@ class Tensor:
             else:
                 self.value = value
             self.shape = self.value.shape
-        if isinstance(value, (int, float)):
+        elif isinstance(value, (int, float)):
             self.value = np.array(float(value)) # Wrap scalars
             self.shape = self.value.shape
+        else:
+            raise NotImplementedError
         self.parents = parents if parents is not None else ()
         self.op = op
         self.grad_required = grad_required
@@ -63,8 +65,8 @@ class Tensor:
         assert self.op == '@'
         a, b = self.parents
         dc = self.grad
-        da = dc @ b.T
-        db = a.T @ dc
+        da = dc @ b.T()
+        db = a.T() @ dc
 
         return (unbroadcast(da, a.shape), unbroadcast(db, b.shape))
 
@@ -88,10 +90,20 @@ class Tensor:
         if isinstance(other, (np.ndarray, int, float)):
             return self + other
         return NotImplemented
+    
+    def __iadd__(self, other):
+        """In place addition"""
+        if isinstance(other, Tensor):
+            self.value = self.value + other.value
+            return self
+        if isinstance(other, (np.ndarray, int, float)):
+            self.value = self.value + other
+            return self
+        return NotImplemented
 
     def _add_backward(self):
         assert self.op == '+'
-        return (unbroadcast(self.grad, self.parents[0].shape), 
+        return (unbroadcast(self.grad, self.parents[0].shape),
                 unbroadcast(self.grad, self.parents[1].shape))
 
     def __sub__(self, other):
@@ -114,6 +126,16 @@ class Tensor:
         if isinstance(other, (np.ndarray, int, float)):
             other = Tensor(other, grad_required=self.grad_required)
             return other - self
+        return NotImplemented
+    
+    def __isub__(self, other):
+        """In place subtraction"""
+        if isinstance(other, Tensor):
+            self.value = self.value - other.value
+            return self
+        if isinstance(other, (np.ndarray, int, float)):
+            self.value = self.value - other
+            return self
         return NotImplemented
 
     def _sub_backward(self):
@@ -148,7 +170,7 @@ class Tensor:
         return (unbroadcast(self.grad * self.parents[1].value, self.parents[0].shape),
                 unbroadcast(self.grad * self.parents[0].value, self.parents[1].shape))
 
-    def __div__(self, other):
+    def __truediv__(self, other):
         """
         Divide on the left by tensor and return a new Tensor
         """
@@ -159,7 +181,7 @@ class Tensor:
             return self / other
         return NotImplemented
 
-    def __rdiv__(self, other):
+    def __rtruediv__(self, other):
         """
         Divide on the right by tensor and return a new Tensor
         """
@@ -172,26 +194,34 @@ class Tensor:
 
     def __getitem__(self, idx):
         """
-        Index into tensor
+        Return a non-differentiable view of the underlying data
         """
         if isinstance(idx, Tensor):
-            return Tensor(self.value[idx.value], grad_required=self.grad_required)
-        if isinstance(idx, (np.ndarray, int)):
-            return Tensor(self.value[idx], grad_required=self.grad_required)
-        return NotImplemented
+            idx = idx.value
+        if isinstance(idx, (np.ndarray, int, slice, tuple)):
+            return Tensor(self.value[idx], grad_required=False)
+        raise TypeError(f"Unsupported index type: {type(idx)}")
 
     def __setitem__(self, idx, item):
         """
-        Mutate tensor
+        In-place mutation of tensor data
         """
-        self.value[idx] = item.value if isinstance(item, Tensor) else item
+        item_val = item.value if isinstance(item, Tensor) else item
+        self.value[idx] = item_val
 
-    def __array__(self):
+    def __array__(self, dtype=None):
         """
         Return array representation of tensor
         """
-        return self.value
-
+        return np.asarray(self.value, dtype=dtype)
+    
+    @staticmethod
+    def _unwrap(x):
+        if isinstance(x, Tensor):
+            return x.value
+        elif isinstance(x, (list, tuple)):
+            return type(x)(Tensor._unwrap(e) for e in x)
+        return x
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """
         Intercept universal function and make compatible with Tensor class
@@ -204,9 +234,9 @@ class Tensor:
         """
         Intercept higher level operations and make compatible with Tensor class
         """
-        if not all(issubclass(t, Tensor) for t in types):
+        if not any(issubclass(t, Tensor) for t in types):
             return NotImplemented
-        raw_args = [x.value if isinstance(x, Tensor) else x for x in args]
+        raw_args = Tensor._unwrap(args)
         result = func(*raw_args, **kwargs)
         return Tensor(result, self.grad_required)
 
@@ -218,17 +248,17 @@ class Tensor:
     
     def _tanh_backward(self):
         assert self.op == 'tanh'
-        return (1 - self.value ** 2) * self.grad
+        return ((1 - self.value ** 2) * self.grad,)
 
     def relu(self):
         """
         ReLU activation function
         """
-        return Tensor(np.maximum(self, 0), parents=(self), op='relu', grad_required=self.grad_required)
+        return Tensor(np.maximum(0, self.value), parents=(self, ), op='relu', grad_required=self.grad_required)
     
     def _relu_backward(self):
         assert self.op == 'relu'
-        return (self.value > 0).astype(float) * self.grad
+        return ((self.value > 0).astype(float) * self.grad,)
     
     def cross_entropy(self, targets):
         """
@@ -248,8 +278,8 @@ class Tensor:
     
     def _cross_entropy_backward(self):
         assert self.op == 'cross_entropy'
-
-        logits = self.value - np.max(self.value, axis=1, keepdims=True)
+        vals, targets = self.parents
+        logits = vals - np.max(vals, axis=1, keepdims=True)
         exp_logits = np.exp(logits)
         grad = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
 
@@ -259,7 +289,7 @@ class Tensor:
 
         # Assemble grad
         n = logits.shape[0]
-        grad[np.arange(n), self.parents[1]] -= 1
+        grad[np.arange(n), targets] -= 1
         grad /= n
         return (grad, None)
 
@@ -337,6 +367,7 @@ class Tensor:
             grad = np.ones_like(self.value)
         if self.grad is None:
             self.grad = np.zeros_like(self.value)
+        self.grad += grad
 
         for parent, parent_grad in zip(self.parents, self._local_grads()):
             if parent_grad is not None:

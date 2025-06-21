@@ -2,4 +2,6 @@
 Init file for the net module
 """
 
-__all__ = []
+from net.tensor import Tensor
+
+__all__ = ["Tensor"]
