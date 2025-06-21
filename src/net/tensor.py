@@ -3,6 +3,7 @@ File containing the tensor class
 """
 
 import numpy as np
+from net.util import unbroadcast
 
 class Tensor:
     """
@@ -15,21 +16,26 @@ class Tensor:
     op: str
     shape: tuple
     grad_required: bool
+    _transpose_axes: tuple
 
-    def __init__(self, value: np.ndarray | int | float, parents: set = None, op: str = None, grad_required: bool = True):
+    def __init__(self, value: np.ndarray | int | float, parents: tuple=None, op: str = None, grad_required: bool = True, transpose_axes=None):
         if isinstance(value, np.ndarray):
-            self.value = value
-            self.shape = value.shape
-        if isinstance(value, (int, float)):
-            self.value = np.ndarray(float(value)) # Wrap scalars
+            if len(value.shape) == 1:
+                self.value = np.reshape(value, (1, value.shape[0]))
+            else:
+                self.value = value
             self.shape = self.value.shape
-        self.parents = parents
+        if isinstance(value, (int, float)):
+            self.value = np.array(float(value)) # Wrap scalars
+            self.shape = self.value.shape
+        self.parents = parents if parents is not None else ()
         self.op = op
         self.grad_required = grad_required
         if grad_required:
-            self.grad = np.zeros_like(value)
+            self.grad = np.zeros_like(self.value)
         else:
             self.grad = None
+        self._transpose_axes = transpose_axes
 
     def __matmul__(self, other):
         """
@@ -52,6 +58,16 @@ class Tensor:
             other = Tensor(other, grad_required=self.grad_required)
             return other @ self
         return NotImplemented
+    
+    def _matmul_backward(self):
+        assert self.op == '@'
+        a, b = self.parents
+        dc = self.grad
+        da = dc @ b.T
+        db = a.T @ dc
+
+        a.grad += unbroadcast(da, a.shape)
+        b.grad += unbroadcast(db, b.shape)
 
     def __add__(self, other):
         """
@@ -73,7 +89,12 @@ class Tensor:
         if isinstance(other, (np.ndarray, int, float)):
             return self + other
         return NotImplemented
-    
+
+    def _add_backward(self):
+        assert self.op == '+'
+        self.parents[0].grad += unbroadcast(self.grad, self.parents[0].shape)
+        self.parents[1].grad += unbroadcast(self.grad, self.parents[1].shape)
+
     def __sub__(self, other):
         """
         Subtract on the left from tensor and return a new Tensor
@@ -96,6 +117,11 @@ class Tensor:
             return other - self
         return NotImplemented
 
+    def _sub_backward(self):
+        assert self.op == '-'
+        self.parents[0].grad += unbroadcast(self.grad, self.parents[0].shape)
+        self.parents[1].grad += unbroadcast(self.grad, -self.parents[1].shape)
+
     def __mul__(self, other):
         """
         Multiply on the left by tensor and return a new Tensor
@@ -117,6 +143,11 @@ class Tensor:
             other = Tensor(other, grad_required=self.grad_required)
             return other * self
         return NotImplemented
+    
+    def _mul_backward(self):
+        assert self.op == '*'
+        self.parents[0].grad += unbroadcast(self.grad * self.parents[1].value, self.parents[0].shape)
+        self.parents[1].grad += unbroadcast(self.grad * self.parents[0].value, self.parents[1].shape)
 
     def __div__(self, other):
         """
@@ -145,9 +176,9 @@ class Tensor:
         Index into tensor
         """
         if isinstance(idx, Tensor):
-            return self.value[idx.value]
+            return Tensor(self.value[idx.value], grad_required=self.grad_required)
         if isinstance(idx, (np.ndarray, int)):
-            return self.value[idx]
+            return Tensor(self.value[idx], grad_required=self.grad_required)
         return NotImplemented
 
     def __setitem__(self, idx, item):
@@ -185,12 +216,20 @@ class Tensor:
         Tanh activation function
         """
         return Tensor(np.tanh(self.value), parents=(self,), op='tanh', grad_required=self.grad_required)
+    
+    def _tanh_backward(self):
+        assert self.op == 'tanh'
+        self.parents[0].grad += (1 - self.value ** 2) * self.grad
 
     def relu(self):
         """
         ReLU activation function
         """
         return Tensor(np.maximum(self, 0), parents=(self), op='relu', grad_required=self.grad_required)
+    
+    def _relu_backward(self):
+        assert self.op == 'relu'
+        self.parents[0].grad += (self.value > 0).astype(float) * self.grad
     
     def cross_entropy(self, targets):
         """
@@ -202,8 +241,89 @@ class Tensor:
 
         # Clip probs
         eps = 1e-12
-        np.clip(probs, eps, 1 - eps)
+        probs = np.clip(probs, eps, 1 - eps)
 
         n = logits.shape[0]
         loss = -np.mean(np.log(probs[np.arange(n), targets]))
         return Tensor(loss, parents=(self, targets), op='cross_entropy', grad_required=self.grad_required)
+    
+    def _cross_entropy_backward(self):
+        assert self.op == 'cross_entropy'
+
+        logits = self.value - np.max(self.value, axis=1, keepdims=True)
+        exp_logits = np.exp(logits)
+        grad = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
+
+        # Clip probs
+        eps = 1e-12
+        grad = np.clip(grad, eps, 1 - eps)
+
+        # Assemble grad
+        n = logits.shape[0]
+        grad[np.arange(n), self.parents[1]] -= 1
+        grad /= n
+        self.parents[0].grad = grad
+
+    def transpose(self, axes= None):
+        """
+        Transpose tensor with given axes
+        """
+        out = Tensor(self.value.transpose() if axes is None else self.value.transpose(axes),
+                     parents=(self,), op='T', grad_required=self.grad_required, transpose_axes=axes)
+        return out
+    
+    def T(self):
+        """
+        Shorthand for transpose
+        """
+        return self.transpose()
+    
+    def _transpose_backward(self):
+        assert self.op == 'T'
+        if self._transpose_axes is None:
+            self.parents[0].grad += self.grad.T
+        else:
+            inv_axes = np.argsort(self._transpose_axes)
+            self.parents[0].grad = self.grad.transpose(inv_axes)
+
+    
+    def zero_grad(self):
+        """
+        Reset gradient
+        """
+        self.grad = np.zeros_like(self.value)
+
+
+    def item(self):
+        """
+        Get item of tensor if tensor is a scalar
+        """
+        if self.shape == ():
+            return self.value.item()
+        raise ValueError
+    
+    def backward(self):
+        """
+        Recursive backward pass at current Tensor object
+        """
+        if self.op is None:
+            return
+        if self.op == 'cross_entropy':
+            self._cross_entropy_backward()
+        if self.op == 'tanh':
+            self._tanh_backward()
+        if self.op == 'relu':
+            self._relu_backward()
+        if self.op == '@':
+            self._matmul_backward()
+        if self.op == '+':
+            self._add_backward()
+        if self.op == '-':
+            self._sub_backward()
+        if self.op == '*':
+            self._mul_backward()
+        if self.op == 'T':
+            self._transpose_backward()
+        
+        for p in self.parents:
+            p.backward()
