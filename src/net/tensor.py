@@ -287,11 +287,18 @@ class Tensor:
             self.parents[0].grad = self.grad.transpose(inv_axes)
 
     
-    def zero_grad(self):
+    def zero_grad_shallow(self):
         """
         Reset gradient
         """
         self.grad = np.zeros_like(self.value)
+    def zero_grad_deep(self):
+        """
+        Reset gradient of all parents
+        """
+        self.zero_grad_shallow()
+        for p in self.parents:
+            self.zero_grad_deep()
 
 
     def item(self):
@@ -306,6 +313,7 @@ class Tensor:
         """
         Recursive backward pass at current Tensor object
         """
+
         if self.op is None:
             return
         if self.op == 'cross_entropy':
