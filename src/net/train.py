@@ -26,3 +26,4 @@ def sgd(model: Network, xs: Tensor, ys: Tensor, lr: float = 0.1, batch_size: int
         for param in model.parameters():
             param.clip_grad(5.0)
             param += -lr * param.grad
+            

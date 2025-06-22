@@ -35,6 +35,10 @@ class Tensor:
         else:
             self.grad = None
         self._transpose_axes = transpose_axes
+    
+    def __len__(self):
+        """ Len function """
+        return len(self.value)
 
     def __matmul__(self, other):
         """
@@ -94,6 +98,7 @@ class Tensor:
             self.value = self.value + other.value
             return self
         if isinstance(other, (np.ndarray, int, float)):
+            other = Tensor(other, self.grad_required)
             self.value = self.value + other
             return self
         return NotImplemented

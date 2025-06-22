@@ -49,3 +49,4 @@ class Network:
         out = []
         for block in self.blocks:
             out.extend(block.parameters())
+        return out
