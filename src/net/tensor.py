@@ -60,13 +60,13 @@ class Tensor:
             other = Tensor(other, grad_required=self.grad_required)
             return other @ self
         return NotImplemented
-    
+
     def _matmul_backward(self):
         assert self.op == '@'
         a, b = self.parents
         dc = self.grad
-        da = dc @ b.T()
-        db = a.T() @ dc
+        da = dc @ b.T
+        db = a.T @ dc
 
         return (unbroadcast(da, a.shape), unbroadcast(db, b.shape))
 
@@ -90,7 +90,7 @@ class Tensor:
         if isinstance(other, (np.ndarray, int, float)):
             return self + other
         return NotImplemented
-    
+
     def __iadd__(self, other):
         """In place addition"""
         if isinstance(other, Tensor):
@@ -127,7 +127,7 @@ class Tensor:
             other = Tensor(other, grad_required=self.grad_required)
             return other - self
         return NotImplemented
-    
+
     def __isub__(self, other):
         """In place subtraction"""
         if isinstance(other, Tensor):
@@ -164,7 +164,7 @@ class Tensor:
             other = Tensor(other, grad_required=self.grad_required)
             return other * self
         return NotImplemented
-    
+
     def _mul_backward(self):
         assert self.op == '*'
         return (unbroadcast(self.grad * self.parents[1].value, self.parents[0].shape),
@@ -214,7 +214,7 @@ class Tensor:
         Return array representation of tensor
         """
         return np.asarray(self.value, dtype=dtype)
-    
+
     @staticmethod
     def _unwrap(x):
         if isinstance(x, Tensor):
@@ -245,7 +245,7 @@ class Tensor:
         Tanh activation function
         """
         return Tensor(np.tanh(self.value), parents=(self,), op='tanh', grad_required=self.grad_required)
-    
+
     def _tanh_backward(self):
         assert self.op == 'tanh'
         return ((1 - self.value ** 2) * self.grad,)
@@ -255,11 +255,11 @@ class Tensor:
         ReLU activation function
         """
         return Tensor(np.maximum(0, self.value), parents=(self, ), op='relu', grad_required=self.grad_required)
-    
+
     def _relu_backward(self):
         assert self.op == 'relu'
         return ((self.value > 0).astype(float) * self.grad,)
-    
+
     def cross_entropy(self, targets):
         """
         Cross entropy loss for tensor assuming it is a tensor of logits
@@ -275,7 +275,7 @@ class Tensor:
         n = logits.shape[0]
         loss = -np.mean(np.log(probs[np.arange(n), targets]))
         return Tensor(loss, parents=(self, targets), op='cross_entropy', grad_required=self.grad_required)
-    
+
     def _cross_entropy_backward(self):
         assert self.op == 'cross_entropy'
         vals, targets = self.parents
@@ -300,19 +300,32 @@ class Tensor:
         out = Tensor(self.value.transpose() if axes is None else self.value.transpose(axes),
                      parents=(self,), op='T', grad_required=self.grad_required, transpose_axes=axes)
         return out
-    
+
+    @property
     def T(self):
         """
         Shorthand for transpose
         """
         return self.transpose()
-    
+
     def _transpose_backward(self):
         assert self.op == 'T'
         if self._transpose_axes is None:
             return (self.grad.T,)
         inv_axes = np.argsort(self._transpose_axes)
         return (self.grad.transpose(inv_axes),)
+
+    def reshape(self, shape: tuple):
+        """
+        Reshape tensor and return a new one with the given shape
+        """
+        out = Tensor(self.value.reshape(shape=shape),
+                    parents = (self,), op='reshape', grad_required=self.grad_required)
+        return out
+
+    def _reshape_backward(self):
+        assert self.op == 'reshape'
+        return (self.grad.reshape(shape=self.shape),)
 
     def zero_grad_shallow(self):
         """
@@ -327,7 +340,6 @@ class Tensor:
         for p in self.parents:
             p.zero_grad_deep()
 
-
     def item(self):
         """
         Get item of tensor if tensor is a scalar
@@ -335,7 +347,7 @@ class Tensor:
         if self.shape == ():
             return self.value.item()
         raise ValueError
-    
+
     def _local_grads(self):
         """
         Get local gradients
@@ -358,6 +370,9 @@ class Tensor:
             return self._mul_backward()
         if self.op == 'T':
             return self._transpose_backward()
+        if self.op == 'reshape':
+            return self._reshape_backward()
+        return NotImplemented
 
     def backward(self, grad=None):
         """
@@ -372,4 +387,3 @@ class Tensor:
         for parent, parent_grad in zip(self.parents, self._local_grads()):
             if parent_grad is not None:
                 parent.backward(parent_grad)
-

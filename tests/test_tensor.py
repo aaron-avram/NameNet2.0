@@ -57,7 +57,7 @@ def test_relu_backward():
 
 def test_transpose_backward():
     a = Tensor(np.random.randn(2, 3))
-    b = a.T()
+    b = a.T
     c = b * 2.0
     c.backward(np.ones_like(c.value))
     assert a.grad.shape == a.value.shape
