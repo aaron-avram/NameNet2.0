@@ -20,10 +20,7 @@ class Tensor:
 
     def __init__(self, value: np.ndarray | int | float, parents: tuple=None, op: str = None, grad_required: bool = True, transpose_axes=None):
         if isinstance(value, np.ndarray):
-            if len(value.shape) == 1:
-                self.value = np.reshape(value, (1, value.shape[0]))
-            else:
-                self.value = value
+            self.value = value
             self.shape = self.value.shape
         elif isinstance(value, (int, float)):
             self.value = np.array(float(value)) # Wrap scalars
@@ -190,6 +187,65 @@ class Tensor:
         if isinstance(other, (np.ndarray, int, float)):
             other = Tensor(self, grad_required=self.grad_required)
             return other / self
+        return NotImplemented
+
+    def __lt__(self, other):
+        """
+        Less than
+        """
+        if isinstance(other, Tensor):
+            return self.value < other.value
+        if isinstance(other, np.ndarray | int | float):
+            return self.value < other
+        return NotImplemented
+
+    def __le__(self, other):
+        """
+        Less than or equal to
+        """
+        if isinstance(other, Tensor):
+            return self.value <= other.value
+        if isinstance(other, np.ndarray | int | float):
+            return self.value <= other
+        return NotImplemented
+
+    def __eq__(self, other):
+        """
+        Equal to
+        """
+        if isinstance(other, Tensor):
+            return self.value == other.value
+        if isinstance(other, np.ndarray | int | float):
+            return self.value == other
+        return NotImplemented
+    def __gt__(self, other):
+        """
+        Less than
+        """
+        if isinstance(other, Tensor):
+            return self.value > other.value
+        if isinstance(other, np.ndarray | int | float):
+            return self.value > other
+        return NotImplemented
+
+    def __ge__(self, other):
+        """
+        Less than or equal to
+        """
+        if isinstance(other, Tensor):
+            return self.value >= other.value
+        if isinstance(other, np.ndarray | int | float):
+            return self.value >= other
+        return NotImplemented
+
+    def __ne__(self, other):
+        """
+        Equal to
+        """
+        if isinstance(other, Tensor):
+            return self.value != other.value
+        if isinstance(other, np.ndarray | int | float):
+            return self.value != other
         return NotImplemented
 
     def __getitem__(self, idx):
