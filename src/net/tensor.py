@@ -403,6 +403,12 @@ class Tensor:
         if self.shape == ():
             return self.value.item()
         raise ValueError
+    
+    def clip_grad(self, max_norm: float):
+        """ Clip grad """
+        grad_norm = np.linalg.norm(self.grad)
+        if grad_norm > max_norm:
+            self.grad *= (max_norm / grad_norm)
 
     def _local_grads(self):
         """

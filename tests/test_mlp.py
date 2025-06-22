@@ -24,7 +24,7 @@ def test_predictions_are_valid():
     mlp = MLP(size=(5, 8, 3), act='tanh')
     X, _ = make_dummy_data()
     mlp.forward(X)
-    preds = mlp.preds()
+    preds = mlp._preds()
     assert preds.shape == (10,)
     assert np.all((preds >= 0) & (preds < 3))
 
@@ -32,7 +32,7 @@ def test_loss_computation():
     mlp = MLP(size=(5, 10, 3), act='tanh')
     X, y = make_dummy_data()
     mlp.forward(X)
-    loss = mlp.loss(y)
+    loss = mlp._loss(y)
     assert isinstance(loss, Tensor)
     assert loss.shape == ()
     assert loss.value > 0
@@ -41,7 +41,7 @@ def test_backward_shapes():
     mlp = MLP(size=(5, 6, 3), act='tanh')
     X, y = make_dummy_data()
     mlp.forward(X)
-    loss = mlp.loss(y)
+    loss = mlp._loss(y)
     loss.backward()
 
     # Ensure gradients are filled for all parameters
@@ -56,14 +56,14 @@ def test_mlp_with_large_depth():
     X, y = make_dummy_data()
     out = mlp.forward(X)
     assert out.value.shape == (10, 3)
-    loss = mlp.loss(y)
+    loss = mlp._loss(y)
     assert isinstance(loss, Tensor)
 
 def test_zero_grad():
     mlp = MLP(size=(5, 6, 3), act='tanh')
     X, y = make_dummy_data()
     mlp.forward(X)
-    loss = mlp.loss(y)
+    loss = mlp._loss(y)
     loss.backward()
 
     # Zero gradients

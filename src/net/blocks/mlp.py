@@ -29,15 +29,15 @@ class MLP(Block):
             self.out = block.forward(self.out)
         return self.out
 
-    def preds(self) -> Tensor:
+    def _preds(self) -> Tensor:
         """
-        Get predictions for each class
+        Get predictions for each class -- For testing only
         """
         return np.argmax(self.out, axis=1)
 
-    def loss(self, targets: Tensor) -> Tensor:
+    def _loss(self, targets: Tensor) -> Tensor:
         """
-        Get the loss on the most recent forward pass
+        Get the loss on the most recent forward pass -- For testing only
         """
         return self.out.cross_entropy(targets)
 

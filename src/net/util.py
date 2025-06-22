@@ -3,6 +3,8 @@ File containing utility functions
 """
 import numpy as np
 
+SEED = 42
+
 def unbroadcast(arr, target_shape: tuple) -> np.ndarray:
     """
     Unbroadcast array to target shape by summing along target axes,
