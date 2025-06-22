@@ -2,8 +2,12 @@
 File containing the tensor class
 """
 
+# Imports
 import numpy as np
 from net.util import unbroadcast
+
+# PyLint Configs
+# pylint: disable=protected-access,attribute-defined-outside-init
 
 class Tensor:
     """
@@ -16,9 +20,8 @@ class Tensor:
     op: str
     shape: tuple
     grad_required: bool
-    _transpose_axes: tuple
 
-    def __init__(self, value: np.ndarray | int | float, parents: tuple=None, op: str = None, grad_required: bool = True, transpose_axes=None):
+    def __init__(self, value: np.ndarray | int | float, parents: tuple=None, op: str = None, grad_required: bool = True):
         if isinstance(value, np.ndarray):
             if grad_required:
                 self.value = value.astype(np.float64, copy=False)
@@ -38,7 +41,6 @@ class Tensor:
             self.grad = np.zeros_like(self.value)
         else:
             self.grad = None
-        self._transpose_axes = transpose_axes
     
     def __len__(self):
         """ Len function """
@@ -70,8 +72,23 @@ class Tensor:
         assert self.op == '@'
         a, b = self.parents
         dc = self.grad
-        da = dc @ b.T
-        db = a.T @ dc
+        # Reshape 1D tensors to 2D row vectors
+        if a.value.ndim == 1:
+            a_val = a.value.reshape(1, -1)
+        else:
+            a_val = a.value
+
+        if b.value.ndim == 1:
+            b_val = b.value.reshape(1, -1)
+        else:
+            b_val = b.value
+
+        if len(dc.shape) == 1:
+            dc_val = dc.reshape(1, -1)
+        else:
+            dc_val = dc
+        da = dc_val @ b_val.T
+        db = a_val.T @ dc_val
 
         return (unbroadcast(da, a.shape), unbroadcast(db, b.shape))
 
@@ -338,7 +355,8 @@ class Tensor:
         probs = np.clip(probs, eps, 1 - eps)
 
         n = logits.shape[0]
-        loss = -np.mean(np.log(probs[np.arange(n), targets]))
+        targ_vals = np.asarray(targets, dtype=int)
+        loss = -np.mean(np.log(probs[np.arange(n), targ_vals]))
         return Tensor(loss, parents=(self, targets), op='cross_entropy', grad_required=self.grad_required)
 
     def _cross_entropy_backward(self):
@@ -354,7 +372,8 @@ class Tensor:
 
         # Assemble grad
         n = logits.shape[0]
-        grad[np.arange(n), targets] -= 1
+        targ_vals = np.asarray(targets, dtype=int)
+        grad[np.arange(n), targ_vals] -= 1
         grad /= n
         return (grad, None)
 
@@ -363,7 +382,8 @@ class Tensor:
         Transpose tensor with given axes
         """
         out = Tensor(self.value.transpose() if axes is None else self.value.transpose(axes),
-                     parents=(self,), op='T', grad_required=self.grad_required, transpose_axes=axes)
+                     parents=(self,), op='T', grad_required=self.grad_required)
+        out._transpose_axes = axes
         return out
 
     @property
@@ -375,22 +395,48 @@ class Tensor:
 
     def _transpose_backward(self):
         assert self.op == 'T'
-        if self._transpose_axes is None:
+        axes =  getattr(self, '_transpose_axes', None)
+        if axes is None:
             return (self.grad.T,)
-        inv_axes = np.argsort(self._transpose_axes)
+        inv_axes = np.argsort(axes)
         return (self.grad.transpose(inv_axes),)
 
     def reshape(self, shape: tuple):
         """
         Reshape tensor and return a new one with the given shape
         """
-        out = Tensor(self.value.reshape(shape=shape),
+        out = Tensor(np.reshape(self.value, shape=shape),
                     parents = (self,), op='reshape', grad_required=self.grad_required)
         return out
 
     def _reshape_backward(self):
         assert self.op == 'reshape'
         return (self.grad.reshape(shape=self.shape),)
+
+    def sum(self, axis=None, keepdims=False):
+        """
+        Sum along given axis
+        """
+        out = Tensor(np.sum(self.value, axis=axis, keepdims=keepdims), parents=(self,),
+                    op='sum', grad_required=self.grad_required)
+        out._sum_axis = axis
+        out._sum_keepdims = keepdims
+        return out
+
+    def _sum_backwards(self):
+        assert self.op == 'sum'
+        parent = self.parents[0]
+        grad = self.grad
+
+        axis = getattr(self, '_sum_axis', None)
+        keepdims = getattr(self, '_sum_keepdims', False)
+
+        if not keepdims and axis is not None:
+            if isinstance(axis, int):
+                axis = (axis,)
+            for ax in sorted(axis):
+                np.expand_dims(grad, ax)
+        return np.broadcast_to(grad, parent.shape)
 
     def zero_grad_shallow(self):
         """
@@ -443,6 +489,8 @@ class Tensor:
             return self._transpose_backward()
         if self.op == 'reshape':
             return self._reshape_backward()
+        if self.op == 'sum':
+            return self._sum_backwards()
         return NotImplemented
 
     def backward(self, grad=None):

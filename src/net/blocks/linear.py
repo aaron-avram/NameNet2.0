@@ -21,8 +21,6 @@ class Linear(Block):
 
     def forward(self, inp: Tensor) -> Tensor:
         self.inp = inp
-        # if len(self.inp.shape) == 1:
-        #     self.inp = inp.reshape((1, inp.shape[0])) # Should test without this
         self.out = self.inp @ self.weights.T + self.bias
 
         return self.out

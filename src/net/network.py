@@ -24,7 +24,7 @@ class Network:
         """
         cur_inp = inp
         for block in self.blocks:
-            block.forward(cur_inp)
+            cur_inp = block.forward(cur_inp)
 
         if self.training:
             return self.loss(targets)
@@ -34,7 +34,8 @@ class Network:
         """
         Get predictions for each class
         """
-        return np.argmax(self.blocks[-1].out, axis=1)
+        preds = np.argmax(self.blocks[-1].out, axis=1)
+        return preds if len(preds) != 1 else preds[0]
 
     def loss(self, targets: Tensor) -> Tensor:
         """
