@@ -20,10 +20,14 @@ class Tensor:
 
     def __init__(self, value: np.ndarray | int | float, parents: tuple=None, op: str = None, grad_required: bool = True, transpose_axes=None):
         if isinstance(value, np.ndarray):
-            self.value = value
-            self.shape = self.value.shape
+            if grad_required:
+                self.value = value.astype(np.float64, copy=False)
+            else:
+                self.value = value
+            self.shape = value.shape
+
         elif isinstance(value, (int, float)):
-            self.value = np.array(float(value)) # Wrap scalars
+            self.value = np.array(value, dtype=np.float64) # Wrap scalars
             self.shape = self.value.shape
         else:
             raise NotImplementedError

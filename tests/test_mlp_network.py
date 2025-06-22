@@ -12,7 +12,7 @@ from net.train import sgd
 def make_toy_data(n=20, d_in=4, d_out=3, seed=1):
     np.random.seed(seed)
     X = Tensor(np.random.randn(n, d_in), grad_required=True)
-    y = Tensor(np.random.randint(0, d_out, size=n))
+    y = Tensor(np.random.randint(0, d_out, size=n), grad_required=False)
     return X, y
 
 def test_forward_output_shape():
@@ -62,3 +62,32 @@ def test_sgd_training_decreases_loss():
     final_loss = net.forward(X, y).value
 
     assert final_loss < initial_loss, f"Expected loss to decrease: {initial_loss} → {final_loss}"
+
+def test_mlp_learns_xor():
+    # XOR truth table
+    X_raw = np.array([
+        [0, 0],
+        [0, 1],
+        [1, 0],
+        [1, 1]
+    ])
+    y_raw = np.array([0, 1, 1, 0])  # XOR labels
+
+    # Wrap as Tensor objects
+    X = Tensor(X_raw, grad_required=True)
+    y = Tensor(y_raw, grad_required=False)
+
+    # Create a small MLP: input 2 → hidden 4 → output 2 (binary classification)
+    mlp = MLP(size=(2, 4, 2), act='tanh')
+    net = Network(blocks=(mlp,), training=True)
+
+    # Train using SGD
+    sgd(net, X, y, lr=0.1, batch_size=4, steps=500)
+
+    # Evaluate accuracy
+    net.training = False
+    net.forward(X)
+    preds = net.preds()
+
+    acc = np.mean(preds == y)
+    assert acc >= 0.75, f"XOR accuracy too low: {acc}"
