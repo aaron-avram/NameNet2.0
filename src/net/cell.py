@@ -11,10 +11,9 @@ class Cell:
     Class for a recurrent cell in a RNN
     """
 
-    def __init__(self, hidden_size: int = None, input_size: int = None, act: str = 'tanh', training: bool = True):
+    def __init__(self, hidden_size: int = None, input_size: int = None, act: str = 'tanh'):
         self.initial_state = Tensor(np.zeros(shape=(hidden_size,)))
-        self.training = training
-        self.activation = Activation(act, training)
+        self.activation = Activation(act)
 
     def step(self, prev: Tensor, inp: Tensor) -> Tensor:
         """

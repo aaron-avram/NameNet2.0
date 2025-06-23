@@ -13,7 +13,7 @@ class Embedding(Block):
 
     emb_matrix: Tensor
 
-    def __init__(self, emb_size: int, vocab_size):
+    def __init__(self, emb_size: int, vocab_size: int):
         super().__init__()
         self.emb_matrix = Tensor(np.random.randn(vocab_size, emb_size))
 

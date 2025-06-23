@@ -16,3 +16,4 @@ def unbroadcast(arr, target_shape: tuple) -> np.ndarray:
         if target == 1 and acc != 1:
             arr = np.sum(arr, axis=i, keepdims=True)
     return arr
+

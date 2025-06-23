@@ -413,6 +413,18 @@ class Tensor:
         assert self.op == 'reshape'
         return (self.grad.reshape(shape=self.shape),)
 
+    def broadcast_to(self, shape: tuple):
+        """
+        Broadcast tensor to given shape if possible else raise Error
+        """
+        out_val = np.broadcast_to(self.value, shape)
+        out = Tensor(out_val, parents=(self, ), op='broadcast_to', grad_required=self.grad_required)
+        return out
+
+    def _broadcast_to_backward(self):
+        assert self.op == 'broadcast_to'
+        return unbroadcast(self.grad, self.parents[0].shape)
+
     def sum(self, axis=None, keepdims=False):
         """
         Sum along given axis
@@ -443,8 +455,7 @@ class Tensor:
         Embed Tensor using emb_matrix
         """
         if isinstance(emb_matrix, Tensor):
-            out = emb_matrix.value[self.value]
-            out = np.reshape(out, shape=(out.shape[0], -1))
+            out = emb_matrix.value[self.value.astype(int)]
             return Tensor(out, parents=(self, emb_matrix), op='emb', grad_required=(self.grad_required or emb_matrix.grad_required))
         if isinstance(emb_matrix, np.ndarray):
             emb_matrix = Tensor(emb_matrix)
@@ -454,14 +465,12 @@ class Tensor:
     def _embed_backward(self):
         assert self.op == 'emb'
         idxs, emb_matrix = self.parents
-        out_grad = np.zeros_like(emb_matrix)
+        out_grad = np.zeros_like(emb_matrix.grad)
         flat_idxs = np.ravel(idxs.value)
 
         upd_grad = np.reshape(self.grad, shape=(-1, emb_matrix.shape[1]))
         np.add.at(out_grad, flat_idxs, upd_grad)
-        return out_grad
-
-
+        return (None, out_grad)
 
     def zero_grad_shallow(self):
         """
@@ -483,7 +492,7 @@ class Tensor:
         if self.shape == ():
             return self.value.item()
         raise ValueError
-    
+
     def clip_grad(self, max_norm: float):
         """ Clip grad """
         grad_norm = np.linalg.norm(self.grad)
@@ -514,8 +523,12 @@ class Tensor:
             return self._transpose_backward()
         if self.op == 'reshape':
             return self._reshape_backward()
+        if self.op == 'broadcast_to':
+            return self._broadcast_to_backward()
         if self.op == 'sum':
             return self._sum_backward()
+        if self.op == 'emb':
+            return self._embed_backward()
         return NotImplemented
 
     def backward(self, grad=None):
@@ -530,4 +543,5 @@ class Tensor:
 
         for parent, parent_grad in zip(self.parents, self._local_grads()):
             if parent_grad is not None:
+                print(self.op)
                 parent.backward(parent_grad)
