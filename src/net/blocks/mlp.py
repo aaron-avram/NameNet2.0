@@ -14,12 +14,12 @@ class MLP(Block):
     """
     blocks: list[Block]
 
-    def __init__(self, size: tuple, act: str, training: bool=True):
-        super().__init__(training)
+    def __init__(self, size: tuple, act: str):
+        super().__init__()
         self.blocks = []
         for l1, l2 in zip(size, size[1:]):
-            self.blocks.append(Linear(l1, l2, training))
-            self.blocks.append(Activation(act, training))
+            self.blocks.append(Linear(l1, l2))
+            self.blocks.append(Activation(act))
         self.blocks.pop()
 
     def forward(self, inp: Tensor) -> Tensor:

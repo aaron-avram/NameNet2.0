@@ -14,8 +14,8 @@ class Linear(Block):
     weights: Tensor
     bias: Tensor
 
-    def __init__(self, inp_size: int, out_size: int, training: bool):
-        super().__init__(training)
+    def __init__(self, inp_size: int, out_size: int):
+        super().__init__()
         self.weights = Tensor(np.random.randn(out_size, inp_size)* np.sqrt(2.0 / inp_size))
         self.bias = Tensor(np.zeros(shape=(out_size,)))
 

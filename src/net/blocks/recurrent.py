@@ -13,8 +13,8 @@ class Recurrent(Block):
     """
     cell: Cell
 
-    def __init__(self, cell: Cell, training: bool = True):
-        super().__init__(training)
+    def __init__(self, cell: Cell):
+        super().__init__()
         self.cell = cell
 
     def forward(self, inp: Tensor):

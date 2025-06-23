@@ -12,8 +12,8 @@ class Activation(Block):
 
     act: str
 
-    def __init__(self, act, training: bool):
-        super().__init__(training)
+    def __init__(self, act):
+        super().__init__()
         self.act = act
 
     def forward(self, inp: Tensor):

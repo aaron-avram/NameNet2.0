@@ -423,7 +423,7 @@ class Tensor:
         out._sum_keepdims = keepdims
         return out
 
-    def _sum_backwards(self):
+    def _sum_backward(self):
         assert self.op == 'sum'
         parent = self.parents[0]
         grad = self.grad
@@ -437,6 +437,31 @@ class Tensor:
             for ax in sorted(axis):
                 np.expand_dims(grad, ax)
         return np.broadcast_to(grad, parent.shape)
+
+    def embed(self, emb_matrix):
+        """
+        Embed Tensor using emb_matrix
+        """
+        if isinstance(emb_matrix, Tensor):
+            out = emb_matrix.value[self.value]
+            out = np.reshape(out, shape=(out.shape[0], -1))
+            return Tensor(out, parents=(self, emb_matrix), op='emb', grad_required=(self.grad_required or emb_matrix.grad_required))
+        if isinstance(emb_matrix, np.ndarray):
+            emb_matrix = Tensor(emb_matrix)
+            return self.embed(emb_matrix)
+        return NotImplemented
+
+    def _embed_backward(self):
+        assert self.op == 'emb'
+        idxs, emb_matrix = self.parents
+        out_grad = np.zeros_like(emb_matrix)
+        flat_idxs = np.ravel(idxs.value)
+
+        upd_grad = np.reshape(self.grad, shape=(-1, emb_matrix.shape[1]))
+        np.add.at(out_grad, flat_idxs, upd_grad)
+        return out_grad
+
+
 
     def zero_grad_shallow(self):
         """
@@ -490,7 +515,7 @@ class Tensor:
         if self.op == 'reshape':
             return self._reshape_backward()
         if self.op == 'sum':
-            return self._sum_backwards()
+            return self._sum_backward()
         return NotImplemented
 
     def backward(self, grad=None):

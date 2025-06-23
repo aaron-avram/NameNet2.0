@@ -12,10 +12,9 @@ class Block:
     inp: Tensor
     out: Tensor
 
-    def __init__(self, training: bool):
+    def __init__(self):
         self.inp = None
         self.out = None
-        self.training = training
 
     def forward(self, inp: Tensor) -> Tensor:
         """
