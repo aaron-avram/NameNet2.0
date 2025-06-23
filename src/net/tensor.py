@@ -120,7 +120,7 @@ class Tensor:
             return self
         if isinstance(other, (np.ndarray, int, float)):
             other = Tensor(other, self.grad_required)
-            self.value = self.value + other
+            self += other
             return self
         return NotImplemented
 
@@ -281,8 +281,18 @@ class Tensor:
         if isinstance(idx, Tensor):
             idx = idx.value
         if isinstance(idx, (np.ndarray, int, slice, tuple)):
-            return Tensor(self.value[idx], grad_required=False)
+            out = Tensor(self.value[idx], parents=(self, ), op='slice', grad_required=self.grad_required)
+            out._slice_idx = idx
+            return out
         raise TypeError(f"Unsupported index type: {type(idx)}")
+
+    def _slice_backward(self):
+        assert self.op == 'slice'
+        original = self.parents[0]
+        grad = np.zeros_like(original.value)
+        slice_idx = getattr(self, '_slice_idx')
+        np.add.at(grad, slice_idx, self.grad)
+        return grad
 
     def __setitem__(self, idx, item):
         """
@@ -310,7 +320,9 @@ class Tensor:
         """
         raw_inputs = [x.value if isinstance(x, Tensor) else x for x in inputs]
         result = getattr(ufunc, method)(*raw_inputs, **kwargs)
-        return Tensor(result, self.grad_required)
+        if result is None:
+            return None
+        return Tensor(result, grad_required=self.grad_required)
 
     def __array_function__(self, func, types, args, kwargs):
         """
@@ -330,7 +342,8 @@ class Tensor:
 
     def _tanh_backward(self):
         assert self.op == 'tanh'
-        return ((1 - self.value ** 2) * self.grad,)
+        grad_input = (1 - self.value ** 2) * self.grad
+        return (grad_input,)
 
     def relu(self):
         """
@@ -411,7 +424,7 @@ class Tensor:
 
     def _reshape_backward(self):
         assert self.op == 'reshape'
-        return (self.grad.reshape(shape=self.shape),)
+        return (np.reshape(self.grad, self.parents[0].shape),)
 
     def broadcast_to(self, shape: tuple):
         """
@@ -423,7 +436,7 @@ class Tensor:
 
     def _broadcast_to_backward(self):
         assert self.op == 'broadcast_to'
-        return unbroadcast(self.grad, self.parents[0].shape)
+        return (unbroadcast(self.grad, self.parents[0].shape),)
 
     def sum(self, axis=None, keepdims=False):
         """
@@ -448,7 +461,7 @@ class Tensor:
                 axis = (axis,)
             for ax in sorted(axis):
                 np.expand_dims(grad, ax)
-        return np.broadcast_to(grad, parent.shape)
+        return (np.broadcast_to(grad, parent.shape),)
 
     def embed(self, emb_matrix):
         """
@@ -466,7 +479,7 @@ class Tensor:
         assert self.op == 'emb'
         idxs, emb_matrix = self.parents
         out_grad = np.zeros_like(emb_matrix.grad)
-        flat_idxs = np.ravel(idxs.value)
+        flat_idxs = np.ravel(idxs.value).astype(int)
 
         upd_grad = np.reshape(self.grad, shape=(-1, emb_matrix.shape[1]))
         np.add.at(out_grad, flat_idxs, upd_grad)
@@ -523,6 +536,8 @@ class Tensor:
             return self._transpose_backward()
         if self.op == 'reshape':
             return self._reshape_backward()
+        if self.op == 'slice':
+            return self._slice_backward()
         if self.op == 'broadcast_to':
             return self._broadcast_to_backward()
         if self.op == 'sum':
@@ -530,6 +545,23 @@ class Tensor:
         if self.op == 'emb':
             return self._embed_backward()
         return NotImplemented
+
+    def _build_topo(self, topo_order=None, visited=None):
+        """
+        Build topological order from self
+        """
+        if topo_order is None:
+            topo_order = []
+        if visited is None:
+            visited = set()
+        if id(self) in visited:
+            return topo_order
+        visited.add(id(self))
+        for parent in self.parents:
+            parent._build_topo(topo_order, visited)
+        topo_order.append(self)
+        return topo_order
+
 
     def backward(self, grad=None):
         """
@@ -541,7 +573,13 @@ class Tensor:
             self.grad = np.zeros_like(self.value)
         self.grad += grad
 
-        for parent, parent_grad in zip(self.parents, self._local_grads()):
-            if parent_grad is not None:
-                print(self.op)
-                parent.backward(parent_grad)
+        topo = self._build_topo()
+
+        for tensor in reversed(topo):
+            if tensor.op is not None and tensor.grad_required:
+                grads = tensor._local_grads()
+                for parent, g in zip(tensor.parents, grads):
+                    if g is not None and parent.grad_required:
+                        if parent.grad is None:
+                            parent.grad = np.zeros_like(parent.value)
+                        parent.grad += g

@@ -65,7 +65,7 @@ def test_transpose_backward():
 
 def test_cross_entropy():
     logits = Tensor(np.array([[2.0, 1.0, 0.1]]), grad_required=True)
-    targets = np.array([0])
+    targets = Tensor(np.array([0]))
     loss = logits.cross_entropy(targets)
     loss.backward()
     assert loss.value.shape == ()

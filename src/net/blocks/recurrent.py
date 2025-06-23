@@ -2,7 +2,6 @@
 File containing the recurrent block
 """
 
-import numpy as np
 from net.cell import Cell
 from net.block import Block
 from net.tensor import Tensor

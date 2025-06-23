@@ -17,8 +17,9 @@ def sgd(model: Network, xs: Tensor, ys: Tensor, lr: float = 0.1, batch_size: int
     for step in range(steps):
         idx = gen.integers(0, len(xs), batch_size)
         x_batch, y_batch = xs[idx], ys[idx]
+
         loss = model.forward(x_batch, y_batch)
-        
+
         loss.zero_grad_deep()
         loss.backward()
 

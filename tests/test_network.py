@@ -42,4 +42,4 @@ def test_toy_sequence_classification():
     correct = sum(int(p == y) for p, y in zip(preds, Y_raw))
 
     # Assert full accuracy (perfect fit on toy data)
-    assert correct != len(Y_raw), f"Expected all correct, got {correct}/{len(Y_raw)}"
+    assert correct == len(Y_raw), f"Expected all correct, got {correct}/{len(Y_raw)}"

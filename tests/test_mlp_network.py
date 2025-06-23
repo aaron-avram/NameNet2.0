@@ -91,3 +91,37 @@ def test_mlp_learns_xor():
 
     acc = np.mean(preds == y)
     assert acc >= 0.75, f"XOR accuracy too low: {acc}"
+    
+def trace_graph(tensor, visited=None, indent=0):
+    if visited is None:
+        visited = set()
+    if id(tensor) in visited:
+        return
+    visited.add(id(tensor))
+
+    print("  " * indent + f"Tensor(id={id(tensor)}): op='{tensor.op}', shape={tensor.shape}")
+    if tensor.grad is not None:
+        print("  " * indent + f"   grad.shape = {tensor.grad.shape}")
+    if hasattr(tensor, "parents"):
+        for parent in tensor.parents:
+            trace_graph(parent, visited, indent + 1)
+
+def test_rnn_manual_trace():
+    np.random.seed(0)
+
+    X, y = make_toy_data()
+    mlp = MLP(size=(4, 6, 3), act='tanh')
+    net = Network(blocks=(mlp,), training=True)
+    loss = net.forward(X, y)
+    loss.zero_grad_deep()
+    loss.backward()
+
+    print("\n--- Computation Graph Trace ---")
+    trace_graph(loss)
+
+    print("\n--- Parameter Gradients ---")
+    for p in mlp.parameters():
+        print(f"{p.op}: grad =\n{p.grad}")
+
+if __name__ == "__main__":
+    test_rnn_manual_trace()
