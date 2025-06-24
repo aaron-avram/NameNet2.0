@@ -509,6 +509,7 @@ class Tensor:
     def clip_grad(self, max_norm: float):
         """ Clip grad """
         grad_norm = np.linalg.norm(self.grad)
+        grad_norm = grad_norm.item() if isinstance(grad_norm, Tensor) else grad_norm
         if grad_norm > max_norm:
             self.grad *= (max_norm / grad_norm)
 

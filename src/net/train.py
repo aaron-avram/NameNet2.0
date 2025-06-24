@@ -20,9 +20,24 @@ def sgd(model: Network, xs: Tensor, ys: Tensor, lr: float = 0.1, batch_size: int
 
         loss = model.forward(x_batch, y_batch)
 
+        l2_lambda = 1e-4
+        l2_penalty = Tensor(0.0)
+        for param in model.parameters():
+            l2_penalty += (param * param).sum()
+
+        loss = loss + l2_lambda * l2_penalty
+
         loss.zero_grad_deep()
         loss.backward()
 
         for param in model.parameters():
             param.clip_grad(5.0)
             param += -lr * param.grad
+        
+
+        
+        if step == steps // 2:
+            lr = lr * 0.1
+
+        if step % 100 == 0:
+            print(f"Loss: {loss.item()} on step: {step + 1}")

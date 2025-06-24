@@ -12,8 +12,9 @@ class Cell:
     """
 
     def __init__(self, hidden_size: int = None, input_size: int = None, act: str = 'tanh'):
-        self.initial_state = Tensor(np.zeros(shape=(hidden_size,)))
         self.activation = Activation(act)
+        self.hidden_size = hidden_size
+        self.input_size = input_size
 
     def step(self, prev: Tensor, inp: Tensor) -> Tensor:
         """
