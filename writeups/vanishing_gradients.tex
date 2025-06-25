@@ -90,4 +90,15 @@ that this property will be preserved.
 Now in the general case, if $W$ is not positive, we can apply the polar decomposition to see that $W = UR$, and since $U$ is unitary
 the magnitude of $W$'s gradients will be largerly determined by $R$, which is the case we have analyzed above. Thus, it is clear that in Vanilla
 Recurrent Neural Networks, gradient instability easily appears, especially as sequence length increases.
+
+\section*{A Solution: LSTM}
+The main issue with Vanilla RNNs is that they do not have selective memory. Thus we want to find a way for RNNs to learn which updates to its hidden state
+are important, so that it does not get flooded with large amounts of information that weakens gradient expressiveness. One of the most successful solutions was
+the Long Short-Term memory cell. First, informally, what we are trying to do is learn three gates which filter what our RNN remembers, these will apply
+elementwise to the state and output values of each cell with the filters as arrays of the same dimension as the state value with values between 0 and 1. 
+The first of these gates is the forget gate, $f^{(t)}$, the gate at step $t$, which is a filter for how important the memory of the previous state was. If the forget gate has mostly values
+close to 1, then the new cell keeps most of the previous state's memory and if it is close to 0, it forgets most of it. Next we have $g^{(t)}$ the input gate, which filters
+how much of the new candidate memory based on the $t$th element in the sequence should be kept. Finally, we have an output gate $o^{(t)}$, which learns how much
+of the memory at step $t$ to pass on to the next step.
+
 \end{document}
