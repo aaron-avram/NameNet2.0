@@ -134,7 +134,7 @@ the gradients of one memory unit with respect to the previous unit, we can see t
 exactly how the gradients are passed throughout the network. Specifically:
 \begin{align*}
     c^{(t)} &= f^{(t)} \odot c^{(t-1)} + g^{(t)} \odot \tilde{c}^{(t)} \\
-    \nabla_{c^{(t-1)}}(c^{(t)}) = f^{(t)}
+    \nabla_{c^{(t-1)}}(c^{(t)}) &= f^{(t)}
 \end{align*}
 Thus our forget gate controls how much information is passed between cell memory units. Applying the chain rule:
 \begin{align*}
