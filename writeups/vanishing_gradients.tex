@@ -117,7 +117,7 @@ that below $\sigma$ will be used to denote a generic sigmoidal function applied 
 Now we can consider our new candidate memory, which is the new information the RNN processes at this time
 step calculated with the original core Vanilla cell:
 \begin{align*}
-    \tilde{c}^{(t)} &=  Wh^{(t-1)} + Ux^{(t)} + b
+    \tilde{c}^{(t)} &=  \tanh(Wh^{(t-1)} + Ux^{(t)} + b)
 \end{align*}
 Now we update our hidden state memory at step $t$, $c^{(t)}$:
 \begin{align*}
