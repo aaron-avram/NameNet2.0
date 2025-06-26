@@ -106,7 +106,7 @@ Now the cell is a bit more complex than a Vanilla RNN cell, it passes on two hid
 One is the familiar output unit $h^{(t)}$ and the other is a memory unit $c^{(t)}$. The idea being
 that the value of $h^{(t)}$ is the output representation which is evolved and updated through the LSTM and
 $c^{(t)}$ is a unit that maintains important information used to update the output value. This way the cell
-memory and output is decoupled which allows the memory to be streamlined and maximizing how efficient the model
+memory and output is decoupled which allows the memory to be streamlined to maximize how efficient the model
 stores past information. For the specifics, each unit and gate has its own weight matrices and bias vector. (Note
 that below $\sigma$ will be used to denote a generic sigmoidal function applied elementwise).
 \begin{align*}
@@ -115,7 +115,7 @@ that below $\sigma$ will be used to denote a generic sigmoidal function applied 
     o^{(t)} &=\sigma(W_oh^{(t-1)} + U_ox^{(t)} + b_o) \\
 \end{align*}
 Now we can consider our new candidate memory, which is the new information the RNN processes at this time
-step, which is the original core Vanilla cell:
+step calculated with the original core Vanilla cell:
 \begin{align*}
     \tilde{c}^{(t)} &=  Wh^{(t-1)} + Ux^{(t)} + b
 \end{align*}
@@ -127,4 +127,20 @@ Finally we formulate the hidden output unit:
 \begin{align*}
     h^{(t)} &= \tanh(c^{(t)}) \odot o^{(t)}
 \end{align*}
+With this, we pass on $c^{(t)}$, $h^{(t)}$ through the RNN and with this we have developed the theory of an LSTM.
+Now for why this solves the vanishing gradient problem, the intuitive reason is that it updates our hidden state
+memory additively instead of multiplicatively. This difference helps regulate gradient flow. In fact if we consider
+the gradients of one memory unit with respect to the previous unit, we can see that the model now learns
+exactly how the gradients are passed throughout the network. Specifically:
+\begin{align*}
+    c^{(t)} &= f^{(t)} \odot c^{(t-1)} + g^{(t)} \odot \tilde{c}^{(t)} \\
+    \nabla_{c^{(t-1)}}(c^{(t)}) = f^{(t)}
+\end{align*}
+Thus our forget gate controls how much information is passed between cell memory units. Applying the chain rule:
+\begin{align*}
+     \nabla_{c^{(0)}}(c^{(t)}) = \prod_{k=1}^{t}f^{(k)}
+\end{align*}
+Note that this is a Pi product of elementwise multiplication not matrix multiplication. But notice, that
+now our gradient will flow if all the values of $f$ are close to 1 in a certain entry. Thus our model learns
+exactly when to let gradients flow. I will implement an LSTM but not in this project.
 \end{document}
