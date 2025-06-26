@@ -101,4 +101,30 @@ close to 1, then the new cell keeps most of the previous state's memory and if i
 how much of the new candidate memory based on the $t$th element in the sequence should be kept. Finally, we have an output gate $o^{(t)}$, which learns how much
 of the memory at step $t$ to pass on to the next step.
 
+
+Now the cell is a bit more complex than a Vanilla RNN cell, it passes on two hidden state values between time steps.
+One is the familiar output unit $h^{(t)}$ and the other is a memory unit $c^{(t)}$. The idea being
+that the value of $h^{(t)}$ is the output representation which is evolved and updated through the LSTM and
+$c^{(t)}$ is a unit that maintains important information used to update the output value. This way the cell
+memory and output is decoupled which allows the memory to be streamlined and maximizing how efficient the model
+stores past information. For the specifics, each unit and gate has its own weight matrices and bias vector. (Note
+that below $\sigma$ will be used to denote a generic sigmoidal function applied elementwise).
+\begin{align*}
+    f^{(t)} &= \sigma(W_fh^{(t-1)} + U_fx^{(t)} + b_f) \\
+    g^{(t)} &= \sigma(W_gh^{(t-1)} + U_gx^{(t)} + b_g) \\
+    o^{(t)} &=\sigma(W_oh^{(t-1)} + U_ox^{(t)} + b_o) \\
+\end{align*}
+Now we can consider our new candidate memory, which is the new information the RNN processes at this time
+step, which is the original core Vanilla cell:
+\begin{align*}
+    \tilde{c}^{(t)} &=  Wh^{(t-1)} + Ux^{(t)} + b
+\end{align*}
+Now we update our hidden state memory at step $t$, $c^{(t)}$:
+\begin{align*}
+    c^{(t)} &= f^{(t)} \odot c^{(t-1)} + g^{(t)} \odot \tilde{c}^{(t)}
+\end{align*}
+Finally we formulate the hidden output unit:
+\begin{align*}
+    h^{(t)} &= \tanh(c^{(t)}) \odot o^{(t)}
+\end{align*}
 \end{document}
